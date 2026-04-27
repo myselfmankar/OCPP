@@ -1,0 +1,17 @@
+[package]
+name = "ocpp-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_repr.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true
+serde_json.workspace = true

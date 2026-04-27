@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ocpp-protocol",
+    "crates/ocpp-transport",
+    "crates/ocpp-store",
+    "crates/ocpp-adapter",
+    "crates/ocpp-internal-mqtt",
+    "crates/ocpp-internal-grpc",
+    "crates/ocpp-gateway",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/Golain/OCPP"
+
+[workspace.dependencies]
+# async runtime
+tokio = { version = "1.38", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures = "0.3"
+futures-util = "0.3"
+async-trait = "0.1"
+
+# websocket + tls
+tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots", "url"] }
+rustls = "0.23"
+rustls-pemfile = "2"
+rustls-native-certs = "0.7"
+http = "1"
+
+# serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_repr = "0.1"
+serde_with = "3"
+
+# misc
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+url = { version = "2", features = ["serde"] }
+base64 = "0.22"
+rand = "0.8"
+
+# errors / logs
+thiserror = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# config / store
+config = { version = "0.14", default-features = false, features = ["yaml"] }
+sled = "0.34"
+
+# internal protocols
+rumqttc = "0.24"
+tonic = "0.12"
+prost = "0.13"
+
+# dev
+jsonschema = "0.18"
+tokio-test = "0.4"
+
+# internal crates
+ocpp-protocol = { path = "crates/ocpp-protocol" }
+ocpp-transport = { path = "crates/ocpp-transport" }
+ocpp-store = { path = "crates/ocpp-store" }
+ocpp-adapter = { path = "crates/ocpp-adapter" }
+ocpp-internal-mqtt = { path = "crates/ocpp-internal-mqtt" }
+ocpp-internal-grpc = { path = "crates/ocpp-internal-grpc" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

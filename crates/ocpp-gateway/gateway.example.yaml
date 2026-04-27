@@ -1,0 +1,35 @@
+# Sample gateway configuration. Copy to `gateway.yaml` and edit.
+csms:
+  base_url: "wss://csms.example.com/ocpp/"
+  security:
+    profile: tls_basic
+    username: "gateway"
+    password: "secret"
+  call_timeout_secs: 30
+
+store:
+  path: "./data/store"
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  topic_prefix: "batteries"
+  # username: "gateway"
+  # password: "secret"
+
+grpc:
+  listen: "0.0.0.0:50051"
+
+charge_points:
+  - id: "CP-0001"
+    vendor: "GolainEV"
+    model: "Edge-1"
+    device:
+      kind: mqtt
+      battery_id: "battery-1"
+  - id: "CP-0002"
+    vendor: "GolainEV"
+    model: "Edge-1"
+    device:
+      kind: grpc
+      battery_id: "battery-2"
