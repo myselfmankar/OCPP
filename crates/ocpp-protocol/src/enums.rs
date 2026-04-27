@@ -111,6 +111,63 @@ pub enum DataTransferStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AvailabilityType {
+    Inoperative,
+    Operative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AvailabilityStatus {
+    Accepted,
+    Rejected,
+    Scheduled,
+}
+
+/// Status values reported via FirmwareStatusNotification (OCPP 1.6 §5.16).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FirmwareStatus {
+    Downloaded,
+    DownloadFailed,
+    Downloading,
+    Idle,
+    InstallationFailed,
+    Installing,
+    Installed,
+}
+
+/// Status values reported via DiagnosticsStatusNotification (OCPP 1.6 §5.10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DiagnosticsStatus {
+    Idle,
+    Uploaded,
+    UploadFailed,
+    Uploading,
+}
+
+/// Response status for ClearCache (OCPP 1.6 §5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClearCacheStatus {
+    Accepted,
+    Rejected,
+}
+
+/// How SendLocalList should be applied (OCPP 1.6 §5.12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateType {
+    Differential,
+    Full,
+}
+
+/// Result of SendLocalList (OCPP 1.6 §5.12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateStatus {
+    Accepted,
+    Failed,
+    NotSupported,
+    VersionMismatch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StopReason {
     EmergencyStop,
     EVDisconnected,
@@ -201,4 +258,64 @@ pub enum UnitOfMeasure {
     #[serde(rename = "Celsius", alias = "Celcius")]
     Celsius,
     Fahrenheit, Percent,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChargingProfileStatus {
+    Accepted,
+    Rejected,
+    NotSupported,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChargingProfilePurpose {
+    ChargePointMaxProfile,
+    TxDefaultProfile,
+    TxProfile,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChargingProfileKind {
+    Absolute,
+    Recurring,
+    Relative,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ChargingRateUnit {
+    A,
+    W,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecurrencyKind {
+    Daily,
+    Weekly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClearChargingProfileStatus {
+    Accepted,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GetCompositeScheduleStatus {
+    Accepted,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReservationStatus {
+    Accepted,
+    Faulted,
+    Occupied,
+    Rejected,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CancelReservationStatus {
+    Accepted,
+    Rejected,
 }

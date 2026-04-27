@@ -3,6 +3,11 @@
 //! The gateway runs the gRPC server; each battery is a client that opens a
 //! `BatteryBus.Stream` RPC. Events flow client→server, commands server→client.
 
+// `tonic::Status` is ~176 bytes (LSP says so, clippy agrees) and tonic's
+// streaming API forces `Result<_, Status>` everywhere. We don't own the
+// type, so accept the larger Result rather than boxing every call site.
+#![allow(clippy::result_large_err)]
+
 use async_trait::async_trait;
 use futures::Stream;
 use ocpp_adapter::{Device, DeviceCommand, DeviceError, DeviceEvent};

@@ -11,3 +11,7 @@ serde_json.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+ocpp-protocol.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -31,6 +31,24 @@ pub enum Action {
     ChangeConfiguration,
     GetConfiguration,
     UnlockConnector,
+    ChangeAvailability,
+    // Firmware management
+    UpdateFirmware,
+    FirmwareStatusNotification,
+    // Diagnostics
+    GetDiagnostics,
+    DiagnosticsStatusNotification,
+    // Local authorization
+    ClearCache,
+    GetLocalListVersion,
+    SendLocalList,
+    // Reservation
+    ReserveNow,
+    CancelReservation,
+    // Smart charging
+    SetChargingProfile,
+    ClearChargingProfile,
+    GetCompositeSchedule,
 }
 
 impl Action {
@@ -51,6 +69,19 @@ impl Action {
             Action::ChangeConfiguration => "ChangeConfiguration",
             Action::GetConfiguration => "GetConfiguration",
             Action::UnlockConnector => "UnlockConnector",
+            Action::ChangeAvailability => "ChangeAvailability",
+            Action::UpdateFirmware => "UpdateFirmware",
+            Action::FirmwareStatusNotification => "FirmwareStatusNotification",
+            Action::GetDiagnostics => "GetDiagnostics",
+            Action::DiagnosticsStatusNotification => "DiagnosticsStatusNotification",
+            Action::ClearCache => "ClearCache",
+            Action::GetLocalListVersion => "GetLocalListVersion",
+            Action::SendLocalList => "SendLocalList",
+            Action::ReserveNow => "ReserveNow",
+            Action::CancelReservation => "CancelReservation",
+            Action::SetChargingProfile => "SetChargingProfile",
+            Action::ClearChargingProfile => "ClearChargingProfile",
+            Action::GetCompositeSchedule => "GetCompositeSchedule",
         }
     }
 
@@ -71,6 +102,19 @@ impl Action {
             "ChangeConfiguration" => Action::ChangeConfiguration,
             "GetConfiguration" => Action::GetConfiguration,
             "UnlockConnector" => Action::UnlockConnector,
+            "ChangeAvailability" => Action::ChangeAvailability,
+            "UpdateFirmware" => Action::UpdateFirmware,
+            "FirmwareStatusNotification" => Action::FirmwareStatusNotification,
+            "GetDiagnostics" => Action::GetDiagnostics,
+            "DiagnosticsStatusNotification" => Action::DiagnosticsStatusNotification,
+            "ClearCache" => Action::ClearCache,
+            "GetLocalListVersion" => Action::GetLocalListVersion,
+            "SendLocalList" => Action::SendLocalList,
+            "ReserveNow" => Action::ReserveNow,
+            "CancelReservation" => Action::CancelReservation,
+            "SetChargingProfile" => Action::SetChargingProfile,
+            "ClearChargingProfile" => Action::ClearChargingProfile,
+            "GetCompositeSchedule" => Action::GetCompositeSchedule,
             _ => return None,
         })
     }

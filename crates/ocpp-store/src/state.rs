@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use ocpp_protocol::enums::StopReason;
 use serde::{Deserialize, Serialize};
 use sled::Tree;
 
@@ -20,6 +21,19 @@ pub struct ActiveTransaction {
     pub id_tag: String,
     pub meter_start: i32,
     pub started_at: DateTime<Utc>,
+    /// If set, a `StopTransaction` was issued locally but the CSMS could not
+    /// be reached. The next reconnect must retry this stop before the active
+    /// transaction is cleared.
+    #[serde(default)]
+    pub pending_stop: Option<PendingStop>,
+}
+
+/// A locally-completed stop that has not yet been confirmed by the CSMS.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingStop {
+    pub meter_stop: i32,
+    pub timestamp: DateTime<Utc>,
+    pub reason: Option<StopReason>,
 }
 
 const KEY_BOOT: &[u8] = b"boot";

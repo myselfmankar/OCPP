@@ -81,9 +81,9 @@ impl<V: OcppVersion> Session<V> {
     pub async fn call<R: OcppRequest>(&self, req: R) -> Result<R::Response, CallFailure> {
         let unique_id = Uuid::new_v4().to_string();
         let payload = serde_json::to_value(&req).map_err(|e| {
-            CallFailure::Transport(TransportError::Protocol(
+            CallFailure::Transport(TransportError::Protocol(Box::new(
                 ocpp_protocol::ProtocolError::Json(e),
-            ))
+            )))
         })?;
         let frame = Frame::Call(Call {
             unique_id: unique_id.clone(),
@@ -106,6 +106,44 @@ impl<V: OcppVersion> Session<V> {
         match reply {
             Ok(value) => serde_json::from_value::<R::Response>(value)
                 .map_err(|e| CallFailure::BadResponse(e.to_string())),
+            Err(call_err) => Err(CallFailure::CallError {
+                code: call_err.error_code,
+                description: call_err.error_description,
+                details: call_err.error_details,
+            }),
+        }
+    }
+
+    /// Send a `CALL` by raw `action` + JSON `payload` and await the raw
+    /// `CALLRESULT` payload. Used by the offline-queue replay path, where
+    /// we have already-serialized requests we want to redeliver without
+    /// rehydrating them into typed structs.
+    pub async fn call_raw(
+        &self,
+        action: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, CallFailure> {
+        let unique_id = Uuid::new_v4().to_string();
+        let frame = Frame::Call(Call {
+            unique_id: unique_id.clone(),
+            action: action.to_string(),
+            payload,
+        });
+
+        let rx = self.correlator.register(unique_id.clone()).await;
+        self.outbound_tx
+            .send(frame)
+            .await
+            .map_err(|_| CallFailure::Transport(TransportError::Closed))?;
+
+        let reply = match timeout(self.cfg.call_timeout, rx).await {
+            Ok(Ok(r)) => r,
+            Ok(Err(_)) => return Err(CallFailure::Transport(TransportError::Closed)),
+            Err(_) => return Err(CallFailure::Transport(TransportError::Timeout)),
+        };
+
+        match reply {
+            Ok(value) => Ok(value),
             Err(call_err) => Err(CallFailure::CallError {
                 code: call_err.error_code,
                 description: call_err.error_description,

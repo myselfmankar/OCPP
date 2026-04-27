@@ -91,13 +91,13 @@ impl Supervisor {
             _ = wait_all(&mut tasks) => info!("all actors exited"),
         }
         let _ = cancel_tx.send(true);
-        while let Some(_) = tasks.join_next().await {}
+        while tasks.join_next().await.is_some() {}
         Ok(())
     }
 }
 
 async fn wait_all(tasks: &mut JoinSet<()>) {
-    while let Some(_) = tasks.join_next().await {}
+    while tasks.join_next().await.is_some() {}
 }
 
 async fn connect_mqtt(

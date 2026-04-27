@@ -47,7 +47,10 @@ pub async fn connect(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     if !selected.eq_ignore_ascii_case(subprotocol) {
-        warn!(expected = subprotocol, got = selected, "unexpected ws subprotocol");
+        return Err(TransportError::SubprotocolMismatch {
+            expected: subprotocol.to_string(),
+            got: selected.to_string(),
+        });
     }
 
     let (inbound_tx, inbound_rx) = mpsc::channel::<Frame>(64);
