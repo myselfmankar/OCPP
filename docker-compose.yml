@@ -1,0 +1,34 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: ocpp-mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+
+  ocpp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ocpp-gateway:dev
+    container_name: ocpp-gateway
+    depends_on:
+      - mosquitto
+    # Talk to SteVe and Mosquitto running on the host (Docker Desktop on Windows).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RUST_LOG: "info,ocpp_adapter=debug,ocpp_transport=debug"
+    volumes:
+      - ./gateway.docker.yaml:/app/gateway.yaml:ro
+      - gateway-store:/app/data
+    ports:
+      - "50051:50051"
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:
+  gateway-store:

@@ -1,0 +1,11 @@
+target/
+**/target/
+.git/
+.github/
+docs/
+data/
+*.md
+.vscode/
+.idea/
+gateway.yaml
+.cargo-target/

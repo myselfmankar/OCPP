@@ -1,0 +1,27 @@
+# Used when running the gateway inside Docker Compose.
+# - SteVe runs on the host (Docker Desktop), reached via host.docker.internal
+# - Mosquitto is the compose service "mosquitto"
+csms:
+  base_url: "ws://host.docker.internal:8180/steve/websocket/CentralSystemService/"
+  security:
+    profile: plain
+  call_timeout_secs: 30
+
+store:
+  path: "/app/data/store"
+
+mqtt:
+  host: "mosquitto"
+  port: 1883
+  topic_prefix: "batteries"
+
+grpc:
+  listen: "0.0.0.0:50051"
+
+charge_points:
+  - id: "CP-0001"
+    vendor: "GolainEV"
+    model: "Edge-1"
+    device:
+      kind: mqtt
+      battery_id: "battery-1"

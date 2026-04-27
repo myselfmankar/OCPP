@@ -41,13 +41,14 @@ impl MqttDevice {
         let (client, eventloop) = AsyncClient::new(opts, 32);
 
         let event_topic = format!("{}/{}/events", cfg.topic_prefix, cfg.battery_id);
-        client
-            .subscribe(&event_topic, QoS::AtLeastOnce)
-            .await
-            .map_err(|e| DeviceError::Backend(format!("subscribe: {e}")))?;
 
         let (tx, _) = broadcast::channel(64);
-        tokio::spawn(run_eventloop(eventloop, tx.clone()));
+        tokio::spawn(run_eventloop(
+            eventloop,
+            client.clone(),
+            event_topic,
+            tx.clone(),
+        ));
 
         Ok(Self {
             client,
@@ -61,9 +62,26 @@ impl MqttDevice {
     }
 }
 
-async fn run_eventloop(mut el: EventLoop, tx: broadcast::Sender<DeviceEvent>) {
+async fn run_eventloop(
+    mut el: EventLoop,
+    client: AsyncClient,
+    event_topic: String,
+    tx: broadcast::Sender<DeviceEvent>,
+) {
     loop {
         match el.poll().await {
+            Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                // (Re-)subscribe on every successful (re)connect since
+                // we use clean_session=true (rumqttc default).
+                if let Err(e) = client
+                    .subscribe(&event_topic, QoS::AtLeastOnce)
+                    .await
+                {
+                    error!(error=%e, topic=%event_topic, "mqtt re-subscribe failed");
+                } else {
+                    debug!(topic=%event_topic, "mqtt subscribed");
+                }
+            }
             Ok(Event::Incoming(Packet::Publish(p))) => {
                 match serde_json::from_slice::<DeviceEvent>(&p.payload) {
                     Ok(ev) => {

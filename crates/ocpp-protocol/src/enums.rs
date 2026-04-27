@@ -194,5 +194,11 @@ pub enum Location {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnitOfMeasure {
-    Wh, kWh, varh, kvarh, W, kW, VA, kVA, var, kvar, A, V, K, Celcius, Fahrenheit, Percent,
+    Wh, kWh, varh, kvarh, W, kW, VA, kVA, var, kvar, A, V, K,
+    /// OCPP 1.6 schema spells this "Celcius" (typo). Most CSMS implementations
+    /// (including SteVe) accept the correctly-spelled "Celsius".
+    /// We serialize as "Celsius" for broad compatibility, but accept either on input.
+    #[serde(rename = "Celsius", alias = "Celcius")]
+    Celsius,
+    Fahrenheit, Percent,
 }

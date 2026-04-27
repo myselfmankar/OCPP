@@ -226,6 +226,18 @@ impl ChargePoint {
                         timestamp: started_at,
                     })
                     .await?;
+                if !matches!(
+                    resp.id_tag_info.status,
+                    ocpp_protocol::enums::AuthorizationStatus::Accepted
+                ) {
+                    warn!(
+                        cp=%self.cfg.cp_id,
+                        ?resp.id_tag_info.status,
+                        transaction_id=resp.transaction_id,
+                        "StartTransaction rejected by CSMS; not tracking locally"
+                    );
+                    return Ok(());
+                }
                 let tx = ActiveTransaction {
                     transaction_id: resp.transaction_id,
                     connector_id,
@@ -336,7 +348,7 @@ fn meter_value_from(s: MeterSample) -> MeterValue {
     push(
         &mut sampled,
         Measurand::Temperature,
-        UnitOfMeasure::Celcius,
+        UnitOfMeasure::Celsius,
         s.temperature_c,
     );
     if let Some(wh) = s.energy_wh {
