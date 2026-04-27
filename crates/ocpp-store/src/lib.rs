@@ -8,6 +8,10 @@
 
 pub mod queue;
 pub mod state;
+pub mod auth;
+pub mod config;
+pub mod profiles;
+pub mod reservations;
 
 use thiserror::Error;
 
@@ -38,5 +42,25 @@ impl Store {
     pub fn state(&self, cp_id: &str) -> Result<state::CpState, StoreError> {
         let tree = self.db.open_tree(format!("state/{cp_id}"))?;
         Ok(state::CpState::new(tree))
+    }
+
+    pub fn auth(&self, cp_id: &str) -> Result<auth::AuthStore, StoreError> {
+        let tree = self.db.open_tree(format!("auth/{cp_id}"))?;
+        Ok(auth::AuthStore::new(tree))
+    }
+
+    pub fn config(&self, cp_id: &str) -> Result<config::ConfigStore, StoreError> {
+        let tree = self.db.open_tree(format!("config/{cp_id}"))?;
+        Ok(config::ConfigStore::new(tree))
+    }
+
+    pub fn profiles(&self, cp_id: &str) -> Result<profiles::ProfileStore, StoreError> {
+        let tree = self.db.open_tree(format!("profiles/{cp_id}"))?;
+        Ok(profiles::ProfileStore::new(tree))
+    }
+
+    pub fn reservations(&self, cp_id: &str) -> Result<reservations::ReservationStore, StoreError> {
+        let tree = self.db.open_tree(format!("reservations/{cp_id}"))?;
+        Ok(reservations::ReservationStore::new(tree))
     }
 }

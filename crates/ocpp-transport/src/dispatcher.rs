@@ -183,6 +183,14 @@ pub trait CsmsHandler: Send + Sync {
     ) -> HandlerResult<GetCompositeScheduleResponse> {
         Err(HandlerError::not_implemented())
     }
+
+    /// CSMS-initiated DataTransfer (OCPP 1.6 §5.7).
+    async fn data_transfer(
+        &self,
+        _req: ocpp_protocol::messages::DataTransferRequest,
+    ) -> HandlerResult<ocpp_protocol::messages::DataTransferResponse> {
+        Err(HandlerError::not_implemented())
+    }
 }
 
 /// Dispatch an incoming `Call` to the right handler method and produce a
@@ -232,6 +240,7 @@ pub async fn dispatch(handler: &dyn CsmsHandler, call: Call) -> Frame {
         Action::SetChargingProfile => handle!(SetChargingProfile, set_charging_profile),
         Action::ClearChargingProfile => handle!(ClearChargingProfile, clear_charging_profile),
         Action::GetCompositeSchedule => handle!(GetCompositeSchedule, get_composite_schedule),
+        Action::DataTransfer => handle!(DataTransfer, data_transfer),
         // CP-initiated actions arriving from CSMS are protocol violations.
         _ => err_frame(
             unique_id,

@@ -40,6 +40,7 @@ const KEY_BOOT: &[u8] = b"boot";
 const PFX_TX: &str = "tx/";
 
 /// Per-ChargePoint state.
+#[derive(Clone)]
 pub struct CpState {
     tree: Tree,
 }

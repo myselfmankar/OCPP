@@ -10,8 +10,9 @@ use ocpp_protocol::enums::{
 use ocpp_protocol::messages::{
     CancelReservationRequest, CancelReservationResponse, ChangeAvailabilityRequest,
     ChangeAvailabilityResponse, ChangeConfigurationRequest, ChangeConfigurationResponse,
-    ClearCacheRequest, ClearCacheResponse, ClearChargingProfileRequest,
-    ClearChargingProfileResponse, GetCompositeScheduleRequest, GetCompositeScheduleResponse,
+    ConfigurationKey, ClearCacheRequest, ClearCacheResponse, ClearChargingProfileRequest,
+    ClearChargingProfileResponse, DataTransferRequest, DataTransferResponse,
+    GetCompositeScheduleRequest, GetCompositeScheduleResponse,
     GetConfigurationRequest, GetConfigurationResponse, GetDiagnosticsRequest,
     GetDiagnosticsResponse, GetLocalListVersionRequest, GetLocalListVersionResponse,
     RemoteStartTransactionRequest, RemoteStartTransactionResponse, RemoteStopTransactionRequest,
@@ -19,14 +20,19 @@ use ocpp_protocol::messages::{
     ResetResponse, SendLocalListRequest, SendLocalListResponse, SetChargingProfileRequest,
     SetChargingProfileResponse, TriggerMessageRequest, TriggerMessageResponse,
     UnlockConnectorRequest, UnlockConnectorResponse, UpdateFirmwareRequest, UpdateFirmwareResponse,
+    ChargingProfile,
 };
-use ocpp_transport::{CsmsHandler, dispatcher::{HandlerError, HandlerResult}};
+use chrono::Utc;
+use ocpp_transport::CsmsHandler;
+use ocpp_transport::dispatcher::{HandlerError, HandlerResult};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{timeout, Duration};
 use tracing::info;
 
 use crate::Device;
 use crate::events::{DeviceAck, DeviceCommand};
+use crate::metadata::MetadataManager;
+use crate::transaction::{TransactionManager, SmartChargingEngine};
 
 /// `CsmsHandler` impl that translates incoming CSMS calls into `DeviceCommand`s.
 ///
@@ -36,14 +42,18 @@ use crate::events::{DeviceAck, DeviceCommand};
 pub struct AdapterHandler {
     device: Arc<dyn Device>,
     trigger_tx: mpsc::Sender<ocpp_protocol::enums::MessageTrigger>,
+    metadata: Arc<MetadataManager>,
+    transactions: Arc<TransactionManager>,
 }
 
 impl AdapterHandler {
     pub fn new(
         device: Arc<dyn Device>,
         trigger_tx: mpsc::Sender<ocpp_protocol::enums::MessageTrigger>,
+        metadata: Arc<MetadataManager>,
+        transactions: Arc<TransactionManager>,
     ) -> Self {
-        Self { device, trigger_tx }
+        Self { device, trigger_tx, metadata, transactions }
     }
 
     async fn dispatch_cmd(&self, cmd: DeviceCommand) -> HandlerResult<()> {
@@ -117,7 +127,6 @@ impl CsmsHandler for AdapterHandler {
         req: TriggerMessageRequest,
     ) -> HandlerResult<TriggerMessageResponse> {
         info!(message = ?req.requested_message, "TriggerMessage");
-        // Forward to the ChargePoint actor.
         match self.trigger_tx.send(req.requested_message).await {
             Ok(_) => Ok(TriggerMessageResponse {
                 status: TriggerMessageStatus::Accepted,
@@ -125,6 +134,17 @@ impl CsmsHandler for AdapterHandler {
             Err(_) => Ok(TriggerMessageResponse {
                 status: TriggerMessageStatus::Rejected,
             }),
+        }
+    }
+
+    async fn clear_cache(
+        &self,
+        _req: ClearCacheRequest,
+    ) -> HandlerResult<ClearCacheResponse> {
+        info!("ClearCache");
+        match self.metadata.auth().clear_cache() {
+            Ok(()) => Ok(ClearCacheResponse { status: ClearCacheStatus::Accepted }),
+            Err(e) => Err(HandlerError::internal(e.to_string())),
         }
     }
 
@@ -148,6 +168,12 @@ impl CsmsHandler for AdapterHandler {
         req: ChangeConfigurationRequest,
     ) -> HandlerResult<ChangeConfigurationResponse> {
         info!(key = %req.key, "ChangeConfiguration");
+        // Update local store first
+        if let Err(e) = self.metadata.config().set(&req.key, &req.value) {
+            return Err(HandlerError::internal(format!("store: {e}")));
+        }
+
+        // Notify device
         let ack = self
             .block_on_cmd(|tx| DeviceCommand::SetConfig {
                 key: req.key,
@@ -168,11 +194,41 @@ impl CsmsHandler for AdapterHandler {
 
     async fn get_configuration(
         &self,
-        _req: GetConfigurationRequest,
+        req: GetConfigurationRequest,
     ) -> HandlerResult<GetConfigurationResponse> {
-        // v1: the gateway has no persistent CP-side configuration store yet.
-        // Return an empty key list so the CSMS at least gets a well-formed reply.
-        Ok(GetConfigurationResponse::default())
+        info!("GetConfiguration");
+        let mut keys = Vec::new();
+        let mut unknown = Vec::new();
+
+        if let Some(requested) = req.key {
+            for k in requested {
+                if let Ok(Some(v)) = self.metadata.config().get(&k) {
+                    keys.push(ConfigurationKey {
+                        key: k,
+                        readonly: false, // Default to false for now
+                        value: Some(v),
+                    });
+                } else {
+                    unknown.push(k);
+                }
+            }
+        } else {
+            // Return all
+            if let Ok(all) = self.metadata.config().list() {
+                for (k, v) in all {
+                    keys.push(ConfigurationKey {
+                        key: k,
+                        readonly: false,
+                        value: Some(v),
+                    });
+                }
+            }
+        }
+
+        Ok(GetConfigurationResponse {
+            configuration_key: Some(keys),
+            unknown_key: if unknown.is_empty() { None } else { Some(unknown) },
+        })
     }
 
     async fn unlock_connector(
@@ -225,9 +281,6 @@ impl CsmsHandler for AdapterHandler {
         req: UpdateFirmwareRequest,
     ) -> HandlerResult<UpdateFirmwareResponse> {
         info!(location = %req.location, retrieve_date = %req.retrieve_date, "UpdateFirmware");
-        // Per OCPP 1.6 §5.16 the CP must respond immediately with an empty body.
-        // We forward the command to the device in the background; progress is
-        // reported asynchronously via FirmwareStatusNotification events.
         let cmd = DeviceCommand::UpdateFirmware {
             location: req.location,
             retrieve_date: req.retrieve_date,
@@ -259,38 +312,22 @@ impl CsmsHandler for AdapterHandler {
             .send(cmd)
             .await
             .map_err(|e| HandlerError::internal(e.to_string()))?;
-        // Wait up to 5 s for the device to report which file it will upload.
         let file_name = timeout(Duration::from_secs(5), file_name_rx)
             .await
-            .ok()  // timeout
-            .and_then(|r| r.ok())  // channel closed
+            .ok()
+            .and_then(|r| r.ok())
             .flatten();
         Ok(GetDiagnosticsResponse { file_name })
     }
 
-    async fn clear_cache(
-        &self,
-        _req: ClearCacheRequest,
-    ) -> HandlerResult<ClearCacheResponse> {
-        info!("ClearCache");
-        let ack = self
-            .block_on_cmd(|tx| DeviceCommand::ClearCache { ack_tx: Some(tx) })
-            .await?;
-        let status = match ack {
-            DeviceAck::Accepted => ClearCacheStatus::Accepted,
-            _ => ClearCacheStatus::Rejected,
-        };
-        Ok(ClearCacheResponse { status })
-    }
 
     async fn get_local_list_version(
         &self,
         _req: GetLocalListVersionRequest,
     ) -> HandlerResult<GetLocalListVersionResponse> {
         info!("GetLocalListVersion");
-        // No local list storage implemented yet; return version 0 (no list).
-        // OCPP 1.6 §5.12: version 0 means no list is installed.
-        Ok(GetLocalListVersionResponse { list_version: 0 })
+        let list_version = self.metadata.auth().get_version().unwrap_or(0);
+        Ok(GetLocalListVersionResponse { list_version })
     }
 
     async fn send_local_list(
@@ -303,8 +340,11 @@ impl CsmsHandler for AdapterHandler {
             entries = req.local_authorization_list.len(),
             "SendLocalList"
         );
-        // Honest stub: local list storage is not yet implemented.
-        Ok(SendLocalListResponse { status: UpdateStatus::NotSupported })
+        let full = matches!(req.update_type, ocpp_protocol::enums::UpdateType::Full);
+        match self.metadata.auth().update_list(req.list_version, req.local_authorization_list, full) {
+            Ok(()) => Ok(SendLocalListResponse { status: UpdateStatus::Accepted }),
+            Err(e) => Err(HandlerError::internal(format!("store: {e}"))),
+        }
     }
 
     async fn reserve_now(
@@ -312,24 +352,42 @@ impl CsmsHandler for AdapterHandler {
         req: ReserveNowRequest,
     ) -> HandlerResult<ReserveNowResponse> {
         info!(connector = req.connector_id, id_tag = %req.id_tag, "ReserveNow");
+        
+        // Notify device first
         let ack = self
             .block_on_cmd(|tx| DeviceCommand::ReserveNow {
                 connector_id: req.connector_id,
                 expiry_date: req.expiry_date,
-                id_tag: req.id_tag,
+                id_tag: req.id_tag.clone(),
                 reservation_id: req.reservation_id,
                 ack_tx: Some(tx),
             })
             .await?;
 
-        let status = match ack {
-            DeviceAck::Accepted => ReservationStatus::Accepted,
-            DeviceAck::Rejected => ReservationStatus::Rejected,
-            DeviceAck::Failed => ReservationStatus::Faulted,
-            DeviceAck::NotSupported => ReservationStatus::Rejected,
+        if !matches!(ack, DeviceAck::Accepted) {
+            let status = match ack {
+                DeviceAck::Rejected => ReservationStatus::Rejected,
+                DeviceAck::Failed => ReservationStatus::Faulted,
+                DeviceAck::NotSupported => ReservationStatus::Rejected,
+                _ => ReservationStatus::Rejected,
+            };
+            return Ok(ReserveNowResponse { status });
+        }
+
+        // Persist reservation
+        let res = ocpp_store::reservations::Reservation {
+            connector_id: req.connector_id,
+            expiry_date: req.expiry_date,
+            id_tag: req.id_tag,
+            reservation_id: req.reservation_id,
+            parent_id_tag: req.parent_id_tag,
         };
 
-        Ok(ReserveNowResponse { status })
+        if let Err(e) = self.transactions.reservations.set(res) {
+             return Err(HandlerError::internal(format!("store: {e}")));
+        }
+
+        Ok(ReserveNowResponse { status: ReservationStatus::Accepted })
     }
 
     async fn cancel_reservation(
@@ -337,19 +395,28 @@ impl CsmsHandler for AdapterHandler {
         req: CancelReservationRequest,
     ) -> HandlerResult<CancelReservationResponse> {
         info!(id = req.reservation_id, "CancelReservation");
-        let ack = self
-            .block_on_cmd(|tx| DeviceCommand::CancelReservation {
-                reservation_id: req.reservation_id,
-                ack_tx: Some(tx),
-            })
-            .await?;
 
-        let status = match ack {
-            DeviceAck::Accepted => CancelReservationStatus::Accepted,
-            _ => CancelReservationStatus::Rejected,
-        };
+        // Find connector for this reservation ID
+        let res = self.transactions.reservations.find_by_id(req.reservation_id)
+            .map_err(|e| HandlerError::internal(e.to_string()))?;
+        
+        if let Some(r) = res {
+            let ack = self
+                .block_on_cmd(|tx| DeviceCommand::CancelReservation {
+                    reservation_id: req.reservation_id,
+                    ack_tx: Some(tx),
+                })
+                .await?;
 
-        Ok(CancelReservationResponse { status })
+            if matches!(ack, DeviceAck::Accepted) {
+                let _ = self.transactions.reservations.delete(r.connector_id);
+                Ok(CancelReservationResponse { status: CancelReservationStatus::Accepted })
+            } else {
+                Ok(CancelReservationResponse { status: CancelReservationStatus::Rejected })
+            }
+        } else {
+            Ok(CancelReservationResponse { status: CancelReservationStatus::Rejected })
+        }
     }
 
     async fn set_charging_profile(
@@ -361,30 +428,117 @@ impl CsmsHandler for AdapterHandler {
             profile_id = req.cs_charging_profiles.charging_profile_id,
             "SetChargingProfile"
         );
-        // Honest stub: charging profile management not yet implemented.
-        Ok(SetChargingProfileResponse { status: ChargingProfileStatus::NotSupported })
+        if let Err(e) = self.transactions.profiles.set(req.connector_id, req.cs_charging_profiles) {
+            return Err(HandlerError::internal(format!("store: {e}")));
+        }
+        Ok(SetChargingProfileResponse { status: ChargingProfileStatus::Accepted })
     }
 
     async fn clear_charging_profile(
         &self,
         req: ClearChargingProfileRequest,
     ) -> HandlerResult<ClearChargingProfileResponse> {
-        info!(id = ?req.id, "ClearChargingProfile");
-        // Honest stub: nothing to clear if we don't store them.
-        Ok(ClearChargingProfileResponse { status: ClearChargingProfileStatus::Accepted })
+        info!(id = ?req.id, connector = ?req.connector_id, "ClearChargingProfile");
+        
+        let all = self.transactions.profiles.list(req.connector_id).map_err(|e| HandlerError::internal(e.to_string()))?;
+        let mut cleared = false;
+
+        for (cid, p) in all {
+            let match_id = req.id.map_or(true, |id| p.charging_profile_id == id);
+            let match_purpose = req.charging_profile_purpose.map_or(true, |purp| p.charging_profile_purpose == purp);
+            let match_stack = req.stack_level.map_or(true, |stack| p.stack_level == stack);
+
+            if match_id && match_purpose && match_stack {
+                let _ = self.transactions.profiles.delete(cid, p.charging_profile_id);
+                cleared = true;
+            }
+        }
+
+        let status = if cleared {
+            ClearChargingProfileStatus::Accepted
+        } else {
+            ClearChargingProfileStatus::Unknown
+        };
+        Ok(ClearChargingProfileResponse { status })
     }
 
     async fn get_composite_schedule(
         &self,
         req: GetCompositeScheduleRequest,
     ) -> HandlerResult<GetCompositeScheduleResponse> {
-        info!(connector = req.connector_id, "GetCompositeSchedule");
-        // Honest stub: schedule computation not yet implemented.
-        Ok(GetCompositeScheduleResponse {
-            status: GetCompositeScheduleStatus::Rejected,
-            connector_id: None,
-            schedule_start: None,
-            charging_schedule: None,
-        })
+        info!(connector = req.connector_id, duration = req.duration, "GetCompositeSchedule");
+        
+        let all = self.transactions.profiles.list(None).map_err(|e| HandlerError::internal(e.to_string()))?;
+        let applicable: Vec<ChargingProfile> = all.into_iter()
+            .filter(|(cid, _)| *cid == 0 || *cid == req.connector_id)
+            .map(|(_, p)| p)
+            .collect();
+
+        if applicable.is_empty() {
+             return Ok(GetCompositeScheduleResponse {
+                status: GetCompositeScheduleStatus::Rejected,
+                connector_id: None,
+                schedule_start: None,
+                charging_schedule: None,
+            });
+        }
+
+        // For simplicity in 1.6 response, we return the current limit as a single period
+        let now = Utc::now();
+        if let Some(limit) = SmartChargingEngine::evaluate_combined(&applicable, now) {
+            Ok(GetCompositeScheduleResponse {
+                status: GetCompositeScheduleStatus::Accepted,
+                connector_id: Some(req.connector_id),
+                schedule_start: Some(now),
+                charging_schedule: Some(ocpp_protocol::messages::ChargingSchedule {
+                    duration: Some(req.duration),
+                    start_schedule: Some(now),
+                    charging_rate_unit: applicable[0].charging_schedule.charging_rate_unit,
+                    charging_schedule_period: vec![ocpp_protocol::messages::ChargingSchedulePeriod {
+                        start_period: 0,
+                        limit,
+                        number_phases: None,
+                    }],
+                    min_charging_rate: None,
+                }),
+            })
+        } else {
+             Ok(GetCompositeScheduleResponse {
+                status: GetCompositeScheduleStatus::Rejected,
+                connector_id: None,
+                schedule_start: None,
+                charging_schedule: None,
+            })
+        }
+    }
+
+    async fn data_transfer(
+        &self,
+        req: DataTransferRequest,
+    ) -> HandlerResult<DataTransferResponse> {
+        info!(vendor = %req.vendor_id, "DataTransfer");
+        let (tx, rx) = oneshot::channel();
+        let cmd = DeviceCommand::DataTransfer {
+            vendor_id: req.vendor_id,
+            message_id: req.message_id,
+            data: req.data,
+            response_tx: Some(tx),
+        };
+        self.dispatch_cmd(cmd).await?;
+
+        match timeout(Duration::from_secs(10), rx).await {
+            Ok(Ok((ack, data))) => {
+                let status = match ack {
+                    DeviceAck::Accepted => ocpp_protocol::enums::DataTransferStatus::Accepted,
+                    DeviceAck::Rejected => ocpp_protocol::enums::DataTransferStatus::Rejected,
+                    _ => ocpp_protocol::enums::DataTransferStatus::UnknownVendorId,
+                };
+                Ok(DataTransferResponse { status, data })
+            }
+            _ => Ok(DataTransferResponse {
+                status: ocpp_protocol::enums::DataTransferStatus::Rejected,
+                data: None,
+            }),
+        }
     }
 }

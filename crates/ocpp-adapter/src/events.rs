@@ -146,6 +146,13 @@ pub enum DeviceCommand {
         #[serde(skip)]
         ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
+    DataTransfer {
+        vendor_id: String,
+        message_id: Option<String>,
+        data: Option<String>,
+        #[serde(skip)]
+        response_tx: Option<oneshot::Sender<(DeviceAck, Option<String>)>>,
+    },
 }
 
 impl std::fmt::Debug for DeviceCommand {
@@ -175,6 +182,10 @@ impl std::fmt::Debug for DeviceCommand {
                 .finish(),
             Self::CancelReservation { reservation_id, .. } => f.debug_struct("CancelReservation")
                 .field("reservation_id", reservation_id)
+                .finish(),
+            Self::DataTransfer { vendor_id, message_id, .. } => f.debug_struct("DataTransfer")
+                .field("vendor_id", vendor_id)
+                .field("message_id", message_id)
                 .finish(),
         }
     }

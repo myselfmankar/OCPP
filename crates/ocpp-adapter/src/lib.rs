@@ -10,6 +10,9 @@ pub mod charge_point;
 pub mod device;
 pub mod events;
 pub mod handler;
+pub(crate) mod connectivity;
+pub(crate) mod transaction;
+pub(crate) mod metadata;
 
 pub use charge_point::{ChargePoint, ChargePointConfig};
 pub use device::{Device, DeviceError};
