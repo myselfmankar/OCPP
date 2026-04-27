@@ -43,6 +43,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=builder /usr/local/bin/ocpp-gateway /usr/local/bin/ocpp-gateway
 
+# Pre-create the data directory owned by the unprivileged user so the
+# named volume mounted at /app/data inherits the right ownership.
+RUN mkdir -p /app/data && chown -R ocpp:ocpp /app
+
 USER ocpp
 ENV RUST_LOG=info
 EXPOSE 50051

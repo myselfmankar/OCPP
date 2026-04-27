@@ -47,6 +47,7 @@ A **Rust-based OCPP 1.6J client gateway** that registers a battery/charger devic
 - Per-call request/response correlation by UUID
 - Configurable per-call timeout
 - Auto-reconnect with exponential backoff
+- Security profiles supported in code: **Profile 0** (no auth, `ws://`) and **Profile 1** (HTTP Basic over `wss://`). Only Profile 0 exercised in this test run.
 
 ### 1.3 Internal device bus
 
@@ -76,7 +77,7 @@ All tests run against **SteVe** — the most widely used reference OCPP 1.6J Cen
 
 | Test | Result |
 |---|---|
-| WebSocket upgrade with `ocpp1.6` subprotocol |  Pass |
+| WebSocket upgrade with `ocpp1.6` subprotocol (Profile 0 / no-auth, `ws://`) |  Pass |
 | BootNotification → `Accepted` with interval |  Pass |
 | Heartbeat at CSMS-assigned interval |  Pass — stable >1 hour |
 | Auto-reconnect on CSMS restart |  Pass |
@@ -140,3 +141,4 @@ measurands: Current.Import, Energy.Active.Import.Register,
 - **Transport conformance:** WebSocket + JSON framing + correlator — 100 % against SteVe
 - **End-to-end charge transaction:** complete lifecycle accepted by reference CSMS
 - **No protocol-level errors logged** by SteVe across the full test run
+- **Security:** Profile 0 (no auth, `ws://`) validated end-to-end. Profile 1 (HTTP Basic + TLS) implemented in code but not yet exercised against a CSMS that requires it.
