@@ -125,7 +125,7 @@ impl ChargePoint {
                 meter_stop: ps.meter_stop,
                 timestamp: ps.timestamp,
                 transaction_id: tx_id,
-                reason: ps.reason.clone(),
+                reason: ps.reason,
                 transaction_data: None,
             };
             async move {

@@ -8,7 +8,7 @@ use ocpp_protocol::messages::{
 use ocpp_protocol::Ocpp16;
 use ocpp_store::state::{ActiveTransaction, CpState, PendingStop};
 use ocpp_store::profiles::ProfileStore;
-use ocpp_store::reservations::{ReservationStore, Reservation};
+use ocpp_store::reservations::ReservationStore;
 use ocpp_store::auth::AuthStore;
 use ocpp_store::config::ConfigStore;
 use ocpp_transport::Session;
@@ -174,8 +174,7 @@ impl TransactionManager {
                 let mut reservation_id = None;
                 if let Some(res) = reservation {
                     let matches_tag = res.id_tag == id_tag;
-                    let matches_parent = final_auth.parent_id_tag.as_ref()
-                        .map_or(false, |p| p == &res.id_tag);
+                    let matches_parent = final_auth.parent_id_tag.as_ref() == Some(&res.id_tag);
 
                     if matches_tag || matches_parent {
                         reservation_id = Some(res.reservation_id);

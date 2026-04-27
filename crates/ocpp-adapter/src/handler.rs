@@ -444,9 +444,9 @@ impl CsmsHandler for AdapterHandler {
         let mut cleared = false;
 
         for (cid, p) in all {
-            let match_id = req.id.map_or(true, |id| p.charging_profile_id == id);
-            let match_purpose = req.charging_profile_purpose.map_or(true, |purp| p.charging_profile_purpose == purp);
-            let match_stack = req.stack_level.map_or(true, |stack| p.stack_level == stack);
+            let match_id = req.id.is_none_or(|id| p.charging_profile_id == id);
+            let match_purpose = req.charging_profile_purpose.is_none_or(|purp| p.charging_profile_purpose == purp);
+            let match_stack = req.stack_level.is_none_or(|stack| p.stack_level == stack);
 
             if match_id && match_purpose && match_stack {
                 let _ = self.transactions.profiles.delete(cid, p.charging_profile_id);
