@@ -417,7 +417,7 @@ impl E2eHandler {
     async fn assert_seen(&self, action: &str) {
         let seen = self.seen.lock().await;
         assert!(
-            seen.iter().any(|a| *a == action),
+            seen.contains(&action),
             "SteVe never sent {action}"
         );
     }
