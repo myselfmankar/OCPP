@@ -1,44 +1,58 @@
-use std::sync::Arc;
 use chrono::{DateTime, Utc};
-use ocpp_protocol::enums::{AuthorizationStatus, ChargePointErrorCode, ChargePointStatus, Measurand, ReadingContext, UnitOfMeasure, ChargingProfilePurpose};
+use ocpp_protocol::enums::{
+    AuthorizationStatus, ChargePointErrorCode, ChargePointStatus, ChargingProfilePurpose,
+    Measurand, ReadingContext, UnitOfMeasure,
+};
 use ocpp_protocol::messages::{
-    AuthorizeRequest, MeterValue, MeterValuesRequest, SampledValue, StartTransactionRequest, StatusNotificationRequest, StopTransactionRequest,
-    ChargingProfile,
+    AuthorizeRequest, ChargingProfile, MeterValue, MeterValuesRequest, SampledValue,
+    StartTransactionRequest, StatusNotificationRequest, StopTransactionRequest,
 };
 use ocpp_protocol::Ocpp16;
-use ocpp_store::state::{ActiveTransaction, CpState, PendingStop};
-use ocpp_store::profiles::ProfileStore;
-use ocpp_store::reservations::ReservationStore;
 use ocpp_store::auth::AuthStore;
 use ocpp_store::config::ConfigStore;
+use ocpp_store::profiles::ProfileStore;
+use ocpp_store::queue::OutboundQueue;
+use ocpp_store::reservations::ReservationStore;
+use ocpp_store::state::{ActiveTransaction, CpState, PendingStop};
 use ocpp_transport::Session;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use crate::events::{DeviceEvent, MeterSample};
+use crate::outbound::send_or_queue;
 
 pub struct SmartChargingEngine;
 
 impl SmartChargingEngine {
     pub fn evaluate(profile: &ChargingProfile, now: DateTime<Utc>) -> Option<f64> {
         let schedule = &profile.charging_schedule;
-        
-        let start_time = schedule.start_schedule
+
+        let start_time = schedule
+            .start_schedule
             .or(profile.valid_from)
             .unwrap_or(now);
 
         if let Some(from) = profile.valid_from {
-            if now < from { return None; }
+            if now < from {
+                return None;
+            }
         }
         if let Some(to) = profile.valid_to {
-            if now > to { return None; }
+            if now > to {
+                return None;
+            }
         }
 
         let elapsed = (now - start_time).num_seconds() as i32;
-        if elapsed < 0 { return None; }
+        if elapsed < 0 {
+            return None;
+        }
 
         if let Some(duration) = schedule.duration {
-            if elapsed >= duration { return None; }
+            if elapsed >= duration {
+                return None;
+            }
         }
 
         let mut limit = None;
@@ -116,12 +130,18 @@ impl TransactionManager {
     }
 
     fn get_config_bool(&self, key: &str, default: bool) -> bool {
-        self.config.get(key).ok().flatten().map(|v| v == "true").unwrap_or(default)
+        self.config
+            .get(key)
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(default)
     }
 
     pub async fn handle_event(
         &self,
         session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
         event: DeviceEvent,
     ) -> anyhow::Result<()> {
         match event {
@@ -154,7 +174,11 @@ impl TransactionManager {
                 let final_auth = if let Some(info) = auth_info {
                     info
                 } else {
-                    let auth = session.call(AuthorizeRequest { id_tag: id_tag.clone() }).await?;
+                    let auth = session
+                        .call(AuthorizeRequest {
+                            id_tag: id_tag.clone(),
+                        })
+                        .await?;
                     // Update cache if accepted
                     if matches!(auth.id_tag_info.status, AuthorizationStatus::Accepted) {
                         let _ = self.auth.put_cache(&id_tag, &auth.id_tag_info);
@@ -168,9 +192,13 @@ impl TransactionManager {
                 }
 
                 // Reservation check (OCPP 1.6 §5.13.1)
-                let reservation = self.reservations.get(connector_id).ok().flatten()
+                let reservation = self
+                    .reservations
+                    .get(connector_id)
+                    .ok()
+                    .flatten()
                     .or_else(|| self.reservations.get(0).ok().flatten());
-                
+
                 let mut reservation_id = None;
                 if let Some(res) = reservation {
                     let matches_tag = res.id_tag == id_tag;
@@ -187,13 +215,15 @@ impl TransactionManager {
                 }
 
                 let started_at = Utc::now();
-                let resp = session.call(StartTransactionRequest {
-                    connector_id,
-                    id_tag: id_tag.clone(),
-                    meter_start,
-                    reservation_id,
-                    timestamp: started_at,
-                }).await?;
+                let resp = session
+                    .call(StartTransactionRequest {
+                        connector_id,
+                        id_tag: id_tag.clone(),
+                        meter_start,
+                        reservation_id,
+                        timestamp: started_at,
+                    })
+                    .await?;
 
                 if !matches!(resp.id_tag_info.status, AuthorizationStatus::Accepted) {
                     warn!(cp=%self.cp_id, ?resp.id_tag_info.status, transaction_id=resp.transaction_id, "StartTransaction rejected by CSMS");
@@ -232,39 +262,62 @@ impl TransactionManager {
                     transaction_data: None,
                 };
                 let session_for_send = session.clone();
-                self.stop_or_persist(transaction_id, meter_stop, timestamp, reason, || async move {
-                    session_for_send.call(req).await.map(|_| ()).map_err(|e| e.to_string())
-                }).await;
+                self.stop_or_persist(
+                    transaction_id,
+                    meter_stop,
+                    timestamp,
+                    reason,
+                    || async move {
+                        session_for_send
+                            .call(req)
+                            .await
+                            .map(|_| ())
+                            .map_err(|e| e.to_string())
+                    },
+                )
+                .await;
             }
-            DeviceEvent::Meter { connector_id, sample } => {
-                let tx_id = self.active.lock().await.iter()
+            DeviceEvent::Meter {
+                connector_id,
+                sample,
+            } => {
+                let tx_id = self
+                    .active
+                    .lock()
+                    .await
+                    .iter()
                     .find(|t| t.connector_id == connector_id)
                     .map(|t| t.transaction_id);
-                
+
                 let req = MeterValuesRequest {
                     connector_id,
                     transaction_id: tx_id,
                     meter_value: vec![self.meter_value_from(sample)],
                 };
-                let _ = session.call(req).await;
+                let _ = send_or_queue(session, queue, req).await;
             }
             _ => {}
         }
         Ok(())
     }
 
-    pub async fn resume_transactions(&self, session: &Arc<Session<Ocpp16>>) {
+    pub async fn resume_transactions(&self, session: &Arc<Session<Ocpp16>>, queue: &OutboundQueue) {
         let active_list = self.active.lock().await;
         for tx in active_list.iter() {
-            let _ = session.call(StatusNotificationRequest {
-                connector_id: tx.connector_id,
-                error_code: ChargePointErrorCode::NoError,
-                status: ChargePointStatus::Charging,
-                info: Some(format!("resumed tx {}", tx.transaction_id)),
-                timestamp: Some(Utc::now()),
-                vendor_id: None,
-                vendor_error_code: None,
-            }).await;
+            let _ = send_or_queue(
+                session,
+                queue,
+                StatusNotificationRequest {
+                    connector_id: tx.connector_id,
+                    error_code: ChargePointErrorCode::NoError,
+                    status: ChargePointStatus::Charging,
+                    info: Some(format!("resumed tx {}", tx.transaction_id)),
+                    timestamp: Some(Utc::now()),
+                    vendor_id: None,
+                    vendor_error_code: None,
+                },
+            )
+            .await;
         }
     }
 
@@ -280,7 +333,10 @@ impl TransactionManager {
                 match send(tx.transaction_id, &ps).await {
                     Ok(()) => {
                         let _ = self.state.remove_tx(tx.transaction_id);
-                        info!(transaction_id = tx.transaction_id, "pending StopTransaction delivered on reconnect");
+                        info!(
+                            transaction_id = tx.transaction_id,
+                            "pending StopTransaction delivered on reconnect"
+                        );
                     }
                     Err(e) => {
                         warn!(transaction_id = tx.transaction_id, error = %e, "pending StopTransaction retry still failing");
@@ -308,7 +364,10 @@ impl TransactionManager {
         match send().await {
             Ok(()) => {
                 let _ = self.state.remove_tx(transaction_id);
-                self.active.lock().await.retain(|t| t.transaction_id != transaction_id);
+                self.active
+                    .lock()
+                    .await
+                    .retain(|t| t.transaction_id != transaction_id);
             }
             Err(e) => {
                 warn!(transaction_id, error = %e, "StopTransaction send failed; persisting");
@@ -327,7 +386,7 @@ impl TransactionManager {
 
     pub fn meter_value_from(&self, s: MeterSample) -> MeterValue {
         let mut sampled = Vec::new();
-        let push = |sampled: &mut Vec<SampledValue>, measurand, unit, val: Option<f32> | {
+        let push = |sampled: &mut Vec<SampledValue>, measurand, unit, val: Option<f32>| {
             if let Some(v) = val {
                 sampled.push(SampledValue {
                     value: format!("{v}"),
@@ -341,9 +400,24 @@ impl TransactionManager {
             }
         };
         push(&mut sampled, Measurand::SoC, UnitOfMeasure::Percent, s.soc);
-        push(&mut sampled, Measurand::Voltage, UnitOfMeasure::V, s.voltage);
-        push(&mut sampled, Measurand::CurrentImport, UnitOfMeasure::A, s.current);
-        push(&mut sampled, Measurand::PowerActiveImport, UnitOfMeasure::W, s.power_w);
+        push(
+            &mut sampled,
+            Measurand::Voltage,
+            UnitOfMeasure::V,
+            s.voltage,
+        );
+        push(
+            &mut sampled,
+            Measurand::CurrentImport,
+            UnitOfMeasure::A,
+            s.current,
+        );
+        push(
+            &mut sampled,
+            Measurand::PowerActiveImport,
+            UnitOfMeasure::W,
+            s.power_w,
+        );
         push(
             &mut sampled,
             Measurand::Temperature,
@@ -369,11 +443,12 @@ impl TransactionManager {
 
     pub fn get_limit(&self, connector_id: i32) -> Option<f64> {
         let all = self.profiles.list(None).ok()?;
-        let applicable: Vec<ChargingProfile> = all.into_iter()
+        let applicable: Vec<ChargingProfile> = all
+            .into_iter()
             .filter(|(cid, _)| *cid == 0 || *cid == connector_id)
             .map(|(_, p)| p)
             .collect();
-            
+
         SmartChargingEngine::evaluate_combined(&applicable, Utc::now())
     }
 }
@@ -392,8 +467,16 @@ mod tests {
             start_schedule: Some(now),
             charging_rate_unit: ocpp_protocol::enums::ChargingRateUnit::A,
             charging_schedule_period: vec![
-                ChargingSchedulePeriod { start_period: 0, limit: 16.0, number_phases: None },
-                ChargingSchedulePeriod { start_period: 1800, limit: 10.0, number_phases: None },
+                ChargingSchedulePeriod {
+                    start_period: 0,
+                    limit: 16.0,
+                    number_phases: None,
+                },
+                ChargingSchedulePeriod {
+                    start_period: 1800,
+                    limit: 10.0,
+                    number_phases: None,
+                },
             ],
             min_charging_rate: None,
         };
@@ -413,10 +496,19 @@ mod tests {
         // At T+0
         assert_eq!(SmartChargingEngine::evaluate(&profile, now), Some(16.0));
         // At T+1799
-        assert_eq!(SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(1799)), Some(16.0));
+        assert_eq!(
+            SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(1799)),
+            Some(16.0)
+        );
         // At T+1800
-        assert_eq!(SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(1800)), Some(10.0));
+        assert_eq!(
+            SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(1800)),
+            Some(10.0)
+        );
         // At T+3600 (expired)
-        assert_eq!(SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(3601)), None);
+        assert_eq!(
+            SmartChargingEngine::evaluate(&profile, now + chrono::Duration::seconds(3601)),
+            None
+        );
     }
 }

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use chrono::Utc;
 use ocpp_protocol::enums::{ChargePointErrorCode, ChargePointStatus};
 use ocpp_protocol::messages::{
@@ -8,10 +7,13 @@ use ocpp_protocol::messages::{
 use ocpp_protocol::Ocpp16;
 use ocpp_store::auth::AuthStore;
 use ocpp_store::config::ConfigStore;
+use ocpp_store::queue::OutboundQueue;
 use ocpp_transport::Session;
+use std::sync::Arc;
 use tracing::warn;
 
 use crate::events::DeviceEvent;
+use crate::outbound::send_or_queue;
 
 use tokio::sync::Mutex;
 
@@ -37,14 +39,29 @@ impl MetadataManager {
     pub async fn handle_event(
         &self,
         session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
         event: DeviceEvent,
     ) -> anyhow::Result<()> {
         match event {
             DeviceEvent::Plugged { connector_id } => {
-                self.send_status(session, connector_id, ChargePointStatus::Preparing, None).await;
+                self.send_status(
+                    session,
+                    queue,
+                    connector_id,
+                    ChargePointStatus::Preparing,
+                    None,
+                )
+                .await;
             }
             DeviceEvent::Unplugged { connector_id } => {
-                self.send_status(session, connector_id, ChargePointStatus::Available, None).await;
+                self.send_status(
+                    session,
+                    queue,
+                    connector_id,
+                    ChargePointStatus::Available,
+                    None,
+                )
+                .await;
             }
             DeviceEvent::Status {
                 connector_id,
@@ -52,37 +69,69 @@ impl MetadataManager {
                 error_code,
                 info,
             } => {
-                let _ = session.call(StatusNotificationRequest {
-                    connector_id,
-                    error_code,
-                    status,
-                    info,
-                    timestamp: Some(Utc::now()),
-                    vendor_id: None,
-                    vendor_error_code: None,
-                }).await;
+                let _ = send_or_queue(
+                    session,
+                    queue,
+                    StatusNotificationRequest {
+                        connector_id,
+                        error_code,
+                        status,
+                        info,
+                        timestamp: Some(Utc::now()),
+                        vendor_id: None,
+                        vendor_error_code: None,
+                    },
+                )
+                .await;
             }
             DeviceEvent::FirmwareStatus { status } => {
                 *self.last_firmware_status.lock().await = Some(status);
-                let _ = session.call(FirmwareStatusNotificationRequest { status }).await;
+                let _ = send_or_queue(session, queue, FirmwareStatusNotificationRequest { status })
+                    .await;
             }
             DeviceEvent::DiagnosticsStatus { status } => {
                 *self.last_diagnostics_status.lock().await = Some(status);
-                let _ = session.call(DiagnosticsStatusNotificationRequest { status }).await;
+                let _ = send_or_queue(
+                    session,
+                    queue,
+                    DiagnosticsStatusNotificationRequest { status },
+                )
+                .await;
             }
             _ => {}
         }
         Ok(())
     }
 
-    pub async fn report_firmware_status(&self, session: &Arc<Session<Ocpp16>>) {
-        let status = self.last_firmware_status.lock().await.unwrap_or(ocpp_protocol::enums::FirmwareStatus::Idle);
-        let _ = session.call(FirmwareStatusNotificationRequest { status }).await;
+    pub async fn report_firmware_status(
+        &self,
+        session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
+    ) {
+        let status = self
+            .last_firmware_status
+            .lock()
+            .await
+            .unwrap_or(ocpp_protocol::enums::FirmwareStatus::Idle);
+        let _ = send_or_queue(session, queue, FirmwareStatusNotificationRequest { status }).await;
     }
 
-    pub async fn report_diagnostics_status(&self, session: &Arc<Session<Ocpp16>>) {
-        let status = self.last_diagnostics_status.lock().await.unwrap_or(ocpp_protocol::enums::DiagnosticsStatus::Idle);
-        let _ = session.call(DiagnosticsStatusNotificationRequest { status }).await;
+    pub async fn report_diagnostics_status(
+        &self,
+        session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
+    ) {
+        let status = self
+            .last_diagnostics_status
+            .lock()
+            .await
+            .unwrap_or(ocpp_protocol::enums::DiagnosticsStatus::Idle);
+        let _ = send_or_queue(
+            session,
+            queue,
+            DiagnosticsStatusNotificationRequest { status },
+        )
+        .await;
     }
 
     pub async fn heartbeat(&self, session: &Arc<Session<Ocpp16>>) {
@@ -94,19 +143,25 @@ impl MetadataManager {
     async fn send_status(
         &self,
         session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
         connector_id: i32,
         status: ChargePointStatus,
         info: Option<String>,
     ) {
-        let _ = session.call(StatusNotificationRequest {
-            connector_id,
-            error_code: ChargePointErrorCode::NoError,
-            status,
-            info,
-            timestamp: Some(Utc::now()),
-            vendor_id: None,
-            vendor_error_code: None,
-        }).await;
+        let _ = send_or_queue(
+            session,
+            queue,
+            StatusNotificationRequest {
+                connector_id,
+                error_code: ChargePointErrorCode::NoError,
+                status,
+                info,
+                timestamp: Some(Utc::now()),
+                vendor_id: None,
+                vendor_error_code: None,
+            },
+        )
+        .await;
     }
 
     pub fn config(&self) -> &ConfigStore {

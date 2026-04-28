@@ -6,12 +6,12 @@
 //!
 //! Backed by `sled` (embedded KV).
 
-pub mod queue;
-pub mod state;
 pub mod auth;
 pub mod config;
 pub mod profiles;
+pub mod queue;
 pub mod reservations;
+pub mod state;
 
 use thiserror::Error;
 

@@ -73,10 +73,7 @@ async fn run_eventloop(
             Ok(Event::Incoming(Packet::ConnAck(_))) => {
                 // (Re-)subscribe on every successful (re)connect since
                 // we use clean_session=true (rumqttc default).
-                if let Err(e) = client
-                    .subscribe(&event_topic, QoS::AtLeastOnce)
-                    .await
-                {
+                if let Err(e) = client.subscribe(&event_topic, QoS::AtLeastOnce).await {
                     error!(error=%e, topic=%event_topic, "mqtt re-subscribe failed");
                 } else {
                     debug!(topic=%event_topic, "mqtt subscribed");
@@ -125,8 +122,8 @@ impl Device for MqttDevice {
     }
 
     async fn send(&self, cmd: DeviceCommand) -> Result<(), DeviceError> {
-        let bytes = serde_json::to_vec(&cmd)
-            .map_err(|e| DeviceError::Backend(format!("encode: {e}")))?;
+        let bytes =
+            serde_json::to_vec(&cmd).map_err(|e| DeviceError::Backend(format!("encode: {e}")))?;
         self.client
             .publish(self.cmd_topic(), QoS::AtLeastOnce, false, bytes)
             .await

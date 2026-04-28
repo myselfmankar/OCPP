@@ -1,18 +1,16 @@
 use async_trait::async_trait;
 use ocpp_protocol::messages::{
     CancelReservationRequest, CancelReservationResponse, ChangeAvailabilityRequest,
-    ChangeAvailabilityResponse, ChangeConfigurationRequest,
-    ChangeConfigurationResponse, ClearCacheRequest, ClearCacheResponse,
-    ClearChargingProfileRequest, ClearChargingProfileResponse, GetConfigurationRequest,
-    GetConfigurationResponse, GetCompositeScheduleRequest, GetCompositeScheduleResponse,
-    GetDiagnosticsRequest, GetDiagnosticsResponse,
-    GetLocalListVersionRequest, GetLocalListVersionResponse,
-    RemoteStartTransactionRequest, RemoteStartTransactionResponse,
-    RemoteStopTransactionRequest, RemoteStopTransactionResponse, ReserveNowRequest,
-    ReserveNowResponse, ResetRequest, ResetResponse, SendLocalListRequest, SendLocalListResponse,
-    SetChargingProfileRequest, SetChargingProfileResponse, TriggerMessageRequest,
-    TriggerMessageResponse, UnlockConnectorRequest, UnlockConnectorResponse, UpdateFirmwareRequest,
-    UpdateFirmwareResponse,
+    ChangeAvailabilityResponse, ChangeConfigurationRequest, ChangeConfigurationResponse,
+    ClearCacheRequest, ClearCacheResponse, ClearChargingProfileRequest,
+    ClearChargingProfileResponse, GetCompositeScheduleRequest, GetCompositeScheduleResponse,
+    GetConfigurationRequest, GetConfigurationResponse, GetDiagnosticsRequest,
+    GetDiagnosticsResponse, GetLocalListVersionRequest, GetLocalListVersionResponse,
+    RemoteStartTransactionRequest, RemoteStartTransactionResponse, RemoteStopTransactionRequest,
+    RemoteStopTransactionResponse, ReserveNowRequest, ReserveNowResponse, ResetRequest,
+    ResetResponse, SendLocalListRequest, SendLocalListResponse, SetChargingProfileRequest,
+    SetChargingProfileResponse, TriggerMessageRequest, TriggerMessageResponse,
+    UnlockConnectorRequest, UnlockConnectorResponse, UpdateFirmwareRequest, UpdateFirmwareResponse,
 };
 use ocpp_protocol::{Action, Call, CallError, CallErrorCode, CallResult, Frame};
 use serde::Serialize;
@@ -31,7 +29,10 @@ pub struct HandlerError {
 
 impl HandlerError {
     pub fn new(code: CallErrorCode, description: impl Into<String>) -> Self {
-        Self { code, description: description.into() }
+        Self {
+            code,
+            description: description.into(),
+        }
     }
 
     pub fn not_implemented() -> Self {
@@ -121,10 +122,7 @@ pub trait CsmsHandler: Send + Sync {
     }
 
     /// CSMS requests CP to clear its local authorization cache (OCPP 1.6 §5.4).
-    async fn clear_cache(
-        &self,
-        _req: ClearCacheRequest,
-    ) -> HandlerResult<ClearCacheResponse> {
+    async fn clear_cache(&self, _req: ClearCacheRequest) -> HandlerResult<ClearCacheResponse> {
         Err(HandlerError::not_implemented())
     }
 
@@ -145,10 +143,7 @@ pub trait CsmsHandler: Send + Sync {
     }
 
     /// CSMS reserves a connector for an idTag (OCPP 1.6 §5.13).
-    async fn reserve_now(
-        &self,
-        _req: ReserveNowRequest,
-    ) -> HandlerResult<ReserveNowResponse> {
+    async fn reserve_now(&self, _req: ReserveNowRequest) -> HandlerResult<ReserveNowResponse> {
         Err(HandlerError::not_implemented())
     }
 

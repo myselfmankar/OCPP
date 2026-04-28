@@ -27,3 +27,6 @@ thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 rand.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

@@ -2,8 +2,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{
-    ChargingProfileKind, ChargingProfilePurpose, ChargingProfileStatus,
-    ChargingRateUnit, RecurrencyKind,
+    ChargingProfileKind, ChargingProfilePurpose, ChargingProfileStatus, ChargingRateUnit,
+    RecurrencyKind,
 };
 
 /// A single time-interval entry in a charging schedule.
@@ -15,6 +15,7 @@ pub struct ChargingSchedulePeriod {
     /// Power/current limit for this period.
     pub limit: f64,
     /// Optional number of phases (1 or 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub number_phases: Option<i32>,
 }
 
@@ -23,12 +24,15 @@ pub struct ChargingSchedulePeriod {
 #[serde(rename_all = "camelCase")]
 pub struct ChargingSchedule {
     /// Optional total duration (seconds). Absent = unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<i32>,
     /// Start of the schedule (absolute). Required for Absolute profiles.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start_schedule: Option<DateTime<Utc>>,
     pub charging_rate_unit: ChargingRateUnit,
     pub charging_schedule_period: Vec<ChargingSchedulePeriod>,
     /// Minimum charging rate (A or W). Optional.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub min_charging_rate: Option<f64>,
 }
 
@@ -37,12 +41,16 @@ pub struct ChargingSchedule {
 #[serde(rename_all = "camelCase")]
 pub struct ChargingProfile {
     pub charging_profile_id: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_id: Option<i32>,
     pub stack_level: i32,
     pub charging_profile_purpose: ChargingProfilePurpose,
     pub charging_profile_kind: ChargingProfileKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub recurrency_kind: Option<RecurrencyKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valid_from: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub valid_to: Option<DateTime<Utc>>,
     pub charging_schedule: ChargingSchedule,
 }

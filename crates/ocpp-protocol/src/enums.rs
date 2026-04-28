@@ -208,23 +208,40 @@ pub enum ValueFormat {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Measurand {
-    #[serde(rename = "Energy.Active.Export.Register")] EnergyActiveExportRegister,
-    #[serde(rename = "Energy.Active.Import.Register")] EnergyActiveImportRegister,
-    #[serde(rename = "Energy.Reactive.Export.Register")] EnergyReactiveExportRegister,
-    #[serde(rename = "Energy.Reactive.Import.Register")] EnergyReactiveImportRegister,
-    #[serde(rename = "Energy.Active.Export.Interval")] EnergyActiveExportInterval,
-    #[serde(rename = "Energy.Active.Import.Interval")] EnergyActiveImportInterval,
-    #[serde(rename = "Energy.Reactive.Export.Interval")] EnergyReactiveExportInterval,
-    #[serde(rename = "Energy.Reactive.Import.Interval")] EnergyReactiveImportInterval,
-    #[serde(rename = "Power.Active.Export")] PowerActiveExport,
-    #[serde(rename = "Power.Active.Import")] PowerActiveImport,
-    #[serde(rename = "Power.Offered")] PowerOffered,
-    #[serde(rename = "Power.Reactive.Export")] PowerReactiveExport,
-    #[serde(rename = "Power.Reactive.Import")] PowerReactiveImport,
-    #[serde(rename = "Power.Factor")] PowerFactor,
-    #[serde(rename = "Current.Import")] CurrentImport,
-    #[serde(rename = "Current.Export")] CurrentExport,
-    #[serde(rename = "Current.Offered")] CurrentOffered,
+    #[serde(rename = "Energy.Active.Export.Register")]
+    EnergyActiveExportRegister,
+    #[serde(rename = "Energy.Active.Import.Register")]
+    EnergyActiveImportRegister,
+    #[serde(rename = "Energy.Reactive.Export.Register")]
+    EnergyReactiveExportRegister,
+    #[serde(rename = "Energy.Reactive.Import.Register")]
+    EnergyReactiveImportRegister,
+    #[serde(rename = "Energy.Active.Export.Interval")]
+    EnergyActiveExportInterval,
+    #[serde(rename = "Energy.Active.Import.Interval")]
+    EnergyActiveImportInterval,
+    #[serde(rename = "Energy.Reactive.Export.Interval")]
+    EnergyReactiveExportInterval,
+    #[serde(rename = "Energy.Reactive.Import.Interval")]
+    EnergyReactiveImportInterval,
+    #[serde(rename = "Power.Active.Export")]
+    PowerActiveExport,
+    #[serde(rename = "Power.Active.Import")]
+    PowerActiveImport,
+    #[serde(rename = "Power.Offered")]
+    PowerOffered,
+    #[serde(rename = "Power.Reactive.Export")]
+    PowerReactiveExport,
+    #[serde(rename = "Power.Reactive.Import")]
+    PowerReactiveImport,
+    #[serde(rename = "Power.Factor")]
+    PowerFactor,
+    #[serde(rename = "Current.Import")]
+    CurrentImport,
+    #[serde(rename = "Current.Export")]
+    CurrentExport,
+    #[serde(rename = "Current.Offered")]
+    CurrentOffered,
     Voltage,
     Frequency,
     Temperature,
@@ -234,30 +251,56 @@ pub enum Measurand {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Phase {
-    L1, L2, L3, N,
-    #[serde(rename = "L1-N")] L1N,
-    #[serde(rename = "L2-N")] L2N,
-    #[serde(rename = "L3-N")] L3N,
-    #[serde(rename = "L1-L2")] L1L2,
-    #[serde(rename = "L2-L3")] L2L3,
-    #[serde(rename = "L3-L1")] L3L1,
+    L1,
+    L2,
+    L3,
+    N,
+    #[serde(rename = "L1-N")]
+    L1N,
+    #[serde(rename = "L2-N")]
+    L2N,
+    #[serde(rename = "L3-N")]
+    L3N,
+    #[serde(rename = "L1-L2")]
+    L1L2,
+    #[serde(rename = "L2-L3")]
+    L2L3,
+    #[serde(rename = "L3-L1")]
+    L3L1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Location {
-    Cable, EV, Inlet, Outlet, Body,
+    Cable,
+    EV,
+    Inlet,
+    Outlet,
+    Body,
 }
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnitOfMeasure {
-    Wh, kWh, varh, kvarh, W, kW, VA, kVA, var, kvar, A, V, K,
+    Wh,
+    kWh,
+    varh,
+    kvarh,
+    W,
+    kW,
+    VA,
+    kVA,
+    var,
+    kvar,
+    A,
+    V,
+    K,
     /// OCPP 1.6 schema spells this "Celcius" (typo). Most CSMS implementations
     /// (including SteVe) accept the correctly-spelled "Celsius".
     /// We serialize as "Celsius" for broad compatibility, but accept either on input.
     #[serde(rename = "Celsius", alias = "Celcius")]
     Celsius,
-    Fahrenheit, Percent,
+    Fahrenheit,
+    Percent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

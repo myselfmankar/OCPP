@@ -110,12 +110,10 @@ impl Device for GrpcDevice {
 
     async fn send(&self, cmd: DeviceCommand) -> Result<(), DeviceError> {
         let g = self.shared.cmd_tx.lock().await;
-        let tx = g
-            .as_ref()
-            .ok_or_else(|| DeviceError::Backend(format!("battery {} not connected", self.battery_id)))?;
-        tx.send(cmd)
-            .await
-            .map_err(|_| DeviceError::Closed)
+        let tx = g.as_ref().ok_or_else(|| {
+            DeviceError::Backend(format!("battery {} not connected", self.battery_id))
+        })?;
+        tx.send(cmd).await.map_err(|_| DeviceError::Closed)
     }
 }
 

@@ -7,12 +7,13 @@
 //!   CSMS-initiated commands into [`DeviceCommand`]s.
 
 pub mod charge_point;
+pub(crate) mod connectivity;
 pub mod device;
 pub mod events;
 pub mod handler;
-pub(crate) mod connectivity;
-pub(crate) mod transaction;
 pub(crate) mod metadata;
+pub(crate) mod outbound;
+pub(crate) mod transaction;
 
 pub use charge_point::{ChargePoint, ChargePointConfig};
 pub use device::{Device, DeviceError};

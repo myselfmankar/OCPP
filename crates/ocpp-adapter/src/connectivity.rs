@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use chrono::Utc;
 use ocpp_protocol::enums::RegistrationStatus;
 use ocpp_protocol::messages::BootNotificationRequest;
@@ -6,7 +5,10 @@ use ocpp_protocol::Ocpp16;
 use ocpp_store::queue::OutboundQueue;
 use ocpp_store::state::{BootInfo, CpState};
 use ocpp_transport::{Session, SessionConfig};
+use std::sync::Arc;
 use tracing::{info, warn};
+
+use crate::outbound::send_or_queue;
 
 pub struct ConnectivityManager {
     cp_id: String,
@@ -18,12 +20,18 @@ pub struct ConnectivityManager {
 
 impl ConnectivityManager {
     pub fn new(cp_id: String, vendor: String, model: String, session_cfg: SessionConfig) -> Self {
-        Self { cp_id, vendor, model, session_cfg }
+        Self {
+            cp_id,
+            vendor,
+            model,
+            session_cfg,
+        }
     }
 
     pub async fn boot(
         &self,
         session: &Arc<Session<Ocpp16>>,
+        queue: &OutboundQueue,
         state: &CpState,
     ) -> anyhow::Result<u64> {
         let boot_req = BootNotificationRequest {
@@ -33,7 +41,7 @@ impl ConnectivityManager {
         };
         let boot = session.call(boot_req).await?;
         info!(cp=%self.cp_id, status=?boot.status, interval=boot.interval, "BootNotification reply");
-        
+
         state.put_boot(&BootInfo {
             status: format!("{:?}", boot.status),
             interval: boot.interval,
@@ -41,19 +49,27 @@ impl ConnectivityManager {
         })?;
 
         if !matches!(boot.status, RegistrationStatus::Accepted) {
-            return Err(anyhow::anyhow!("BootNotification transition to {:?} not handled", boot.status));
+            return Err(anyhow::anyhow!(
+                "BootNotification transition to {:?} not handled",
+                boot.status
+            ));
         }
 
         // Notify CSMS that Charge Point is Available after boot (Mandatory in 1.6)
-        let _ = session.call(ocpp_protocol::messages::StatusNotificationRequest {
-            connector_id: 0,
-            error_code: ocpp_protocol::enums::ChargePointErrorCode::NoError,
-            status: ocpp_protocol::enums::ChargePointStatus::Available,
-            info: Some("Init after boot".to_string()),
-            timestamp: Some(Utc::now()),
-            vendor_id: None,
-            vendor_error_code: None,
-        }).await;
+        let _ = send_or_queue(
+            session,
+            queue,
+            ocpp_protocol::messages::StatusNotificationRequest {
+                connector_id: 0,
+                error_code: ocpp_protocol::enums::ChargePointErrorCode::NoError,
+                status: ocpp_protocol::enums::ChargePointStatus::Available,
+                info: Some("Init after boot".to_string()),
+                timestamp: Some(Utc::now()),
+                vendor_id: None,
+                vendor_error_code: None,
+            },
+        )
+        .await;
 
         Ok(boot.interval.max(1) as u64)
     }

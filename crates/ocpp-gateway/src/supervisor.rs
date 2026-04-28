@@ -8,9 +8,7 @@ use ocpp_transport::{SecurityProfile, SessionConfig};
 use tokio::task::JoinSet;
 use tracing::{error, info};
 
-use crate::config::{
-    DeviceBackendConfig, GatewayConfig, MqttBrokerConfig, SecurityConfig,
-};
+use crate::config::{DeviceBackendConfig, GatewayConfig, MqttBrokerConfig, SecurityConfig};
 
 pub struct Supervisor {
     cfg: GatewayConfig,
@@ -50,11 +48,10 @@ impl Supervisor {
         for cp in &self.cfg.charge_points {
             let device: Arc<dyn Device> = match &cp.device {
                 DeviceBackendConfig::Mqtt { battery_id } => {
-                    let broker = self
-                        .cfg
-                        .mqtt
-                        .as_ref()
-                        .ok_or_else(|| anyhow::anyhow!("MQTT backend used but no [mqtt] config"))?;
+                    let broker =
+                        self.cfg.mqtt.as_ref().ok_or_else(|| {
+                            anyhow::anyhow!("MQTT backend used but no [mqtt] config")
+                        })?;
                     Arc::new(connect_mqtt(broker, battery_id, &cp.id).await?)
                 }
                 DeviceBackendConfig::Grpc { battery_id } => {

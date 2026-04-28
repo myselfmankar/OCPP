@@ -1,5 +1,5 @@
-use sled::Tree;
 use crate::StoreError;
+use sled::Tree;
 
 const PFX_CONFIG: &str = "config/";
 

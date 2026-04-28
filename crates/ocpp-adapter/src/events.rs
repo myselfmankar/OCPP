@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
-use ocpp_protocol::enums::{AvailabilityType, ChargePointErrorCode, ChargePointStatus, DiagnosticsStatus, FirmwareStatus, StopReason};
+use ocpp_protocol::enums::{
+    AvailabilityType, ChargePointErrorCode, ChargePointStatus, DataTransferStatus,
+    DiagnosticsStatus, FirmwareStatus, StopReason,
+};
 use serde::{Deserialize, Serialize};
 
 /// Single meter sample reported by an internal battery.
@@ -58,9 +61,23 @@ pub enum DeviceEvent {
     FirmwareStatus { status: FirmwareStatus },
     /// Battery reports current diagnostics upload status (maps to DiagnosticsStatusNotification).
     DiagnosticsStatus { status: DiagnosticsStatus },
+    /// Response to a command previously sent by this gateway.
+    CommandAck {
+        command_id: String,
+        status: DeviceAck,
+    },
+    /// Response to a GetDiagnostics command with the file name that will be uploaded.
+    DiagnosticsFile {
+        command_id: String,
+        file_name: Option<String>,
+    },
+    /// Response to a DataTransfer command.
+    DataTransferResult {
+        command_id: String,
+        status: DataTransferStatus,
+        data: Option<String>,
+    },
 }
-
-use tokio::sync::oneshot;
 
 /// Outcome of a device command.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -73,41 +90,35 @@ pub enum DeviceAck {
 }
 
 /// Commands the gateway sends to an internal battery.
-#[derive(Serialize, Deserialize)] // Remove Clone as oneshot::Sender is not Clone
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DeviceCommand {
     StartCharging {
+        command_id: String,
         connector_id: Option<i32>,
         id_tag: String,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     StopCharging {
+        command_id: String,
         transaction_id: i32,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     Unlock {
+        command_id: String,
         connector_id: i32,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     Reboot {
+        command_id: String,
         hard: bool,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     SetConfig {
+        command_id: String,
         key: String,
         value: String,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     SetAvailability {
+        command_id: String,
         connector_id: i32,
         availability_type: AvailabilityType,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     /// Ask device to start a firmware download-and-install sequence.
     UpdateFirmware {
@@ -115,75 +126,145 @@ pub enum DeviceCommand {
         retrieve_date: chrono::DateTime<chrono::Utc>,
         retries: Option<i32>,
         retry_interval: Option<i32>,
-        // No ack_tx: OCPP spec says respond immediately; status comes via FirmwareStatus events.
+        // OCPP responds immediately; progress comes via FirmwareStatus events.
     },
     /// Ask device to collect and upload a diagnostics file.
     GetDiagnostics {
+        command_id: String,
         location: String,
         retries: Option<i32>,
         retry_interval: Option<i32>,
         start_time: Option<chrono::DateTime<chrono::Utc>>,
         stop_time: Option<chrono::DateTime<chrono::Utc>>,
-        /// Channel to receive the filename the device will upload (empty = none available).
-        #[serde(skip)]
-        file_name_tx: Option<tokio::sync::oneshot::Sender<Option<String>>>,
     },
     /// Ask device to clear its local authorization cache.
     ClearCache {
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
+        command_id: String,
     },
     ReserveNow {
+        command_id: String,
         connector_id: i32,
         expiry_date: DateTime<Utc>,
         id_tag: String,
         reservation_id: i32,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     CancelReservation {
+        command_id: String,
         reservation_id: i32,
-        #[serde(skip)]
-        ack_tx: Option<oneshot::Sender<DeviceAck>>,
     },
     DataTransfer {
+        command_id: String,
         vendor_id: String,
         message_id: Option<String>,
         data: Option<String>,
-        #[serde(skip)]
-        response_tx: Option<oneshot::Sender<(DeviceAck, Option<String>)>>,
     },
 }
 
 impl std::fmt::Debug for DeviceCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::StartCharging { connector_id, id_tag, .. } => f.debug_struct("StartCharging")
-                .field("connector_id", connector_id).field("id_tag", id_tag).finish(),
-            Self::StopCharging { transaction_id, .. } => f.debug_struct("StopCharging")
-                .field("transaction_id", transaction_id).finish(),
-            Self::Unlock { connector_id, .. } => f.debug_struct("Unlock")
-                .field("connector_id", connector_id).finish(),
-            Self::Reboot { hard, .. } => f.debug_struct("Reboot")
-                .field("hard", hard).finish(),
-            Self::SetConfig { key, value, .. } => f.debug_struct("SetConfig")
-                .field("key", key).field("value", value).finish(),
-            Self::SetAvailability { connector_id, availability_type, .. } => f.debug_struct("SetAvailability")
-                .field("connector_id", connector_id).field("type", availability_type).finish(),
-            Self::UpdateFirmware { location, retrieve_date, .. } => f.debug_struct("UpdateFirmware")
-                .field("location", location).field("retrieve_date", retrieve_date).finish(),
-            Self::GetDiagnostics { location, .. } => f.debug_struct("GetDiagnostics")
-                .field("location", location).finish(),
-            Self::ClearCache { .. } => f.debug_struct("ClearCache").finish(),
-            Self::ReserveNow { connector_id, id_tag, reservation_id, .. } => f.debug_struct("ReserveNow")
+            Self::StartCharging {
+                command_id,
+                connector_id,
+                id_tag,
+            } => f
+                .debug_struct("StartCharging")
+                .field("command_id", command_id)
+                .field("connector_id", connector_id)
+                .field("id_tag", id_tag)
+                .finish(),
+            Self::StopCharging {
+                command_id,
+                transaction_id,
+            } => f
+                .debug_struct("StopCharging")
+                .field("command_id", command_id)
+                .field("transaction_id", transaction_id)
+                .finish(),
+            Self::Unlock {
+                command_id,
+                connector_id,
+            } => f
+                .debug_struct("Unlock")
+                .field("command_id", command_id)
+                .field("connector_id", connector_id)
+                .finish(),
+            Self::Reboot { command_id, hard } => f
+                .debug_struct("Reboot")
+                .field("command_id", command_id)
+                .field("hard", hard)
+                .finish(),
+            Self::SetConfig {
+                command_id,
+                key,
+                value,
+            } => f
+                .debug_struct("SetConfig")
+                .field("command_id", command_id)
+                .field("key", key)
+                .field("value", value)
+                .finish(),
+            Self::SetAvailability {
+                command_id,
+                connector_id,
+                availability_type,
+            } => f
+                .debug_struct("SetAvailability")
+                .field("command_id", command_id)
+                .field("connector_id", connector_id)
+                .field("type", availability_type)
+                .finish(),
+            Self::UpdateFirmware {
+                location,
+                retrieve_date,
+                ..
+            } => f
+                .debug_struct("UpdateFirmware")
+                .field("location", location)
+                .field("retrieve_date", retrieve_date)
+                .finish(),
+            Self::GetDiagnostics {
+                command_id,
+                location,
+                ..
+            } => f
+                .debug_struct("GetDiagnostics")
+                .field("command_id", command_id)
+                .field("location", location)
+                .finish(),
+            Self::ClearCache { command_id } => f
+                .debug_struct("ClearCache")
+                .field("command_id", command_id)
+                .finish(),
+            Self::ReserveNow {
+                command_id,
+                connector_id,
+                id_tag,
+                reservation_id,
+                ..
+            } => f
+                .debug_struct("ReserveNow")
+                .field("command_id", command_id)
                 .field("connector_id", connector_id)
                 .field("id_tag", id_tag)
                 .field("reservation_id", reservation_id)
                 .finish(),
-            Self::CancelReservation { reservation_id, .. } => f.debug_struct("CancelReservation")
+            Self::CancelReservation {
+                command_id,
+                reservation_id,
+            } => f
+                .debug_struct("CancelReservation")
+                .field("command_id", command_id)
                 .field("reservation_id", reservation_id)
                 .finish(),
-            Self::DataTransfer { vendor_id, message_id, .. } => f.debug_struct("DataTransfer")
+            Self::DataTransfer {
+                command_id,
+                vendor_id,
+                message_id,
+                ..
+            } => f
+                .debug_struct("DataTransfer")
+                .field("command_id", command_id)
                 .field("vendor_id", vendor_id)
                 .field("message_id", message_id)
                 .finish(),

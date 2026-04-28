@@ -12,6 +12,7 @@ pub struct GetCompositeScheduleRequest {
     /// Duration (seconds) of the schedule to compute.
     pub duration: i32,
     /// Preferred rate unit for the response (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub charging_rate_unit: Option<ChargingRateUnit>,
 }
 
@@ -19,8 +20,11 @@ pub struct GetCompositeScheduleRequest {
 #[serde(rename_all = "camelCase")]
 pub struct GetCompositeScheduleResponse {
     pub status: GetCompositeScheduleStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub connector_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_start: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub charging_schedule: Option<ChargingSchedule>,
 }
 
@@ -29,3 +33,21 @@ impl crate::action::OcppRequest for GetCompositeScheduleRequest {
     const ACTION: &'static str = "GetCompositeSchedule";
 }
 impl crate::action::OcppResponse for GetCompositeScheduleResponse {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejected_response_omits_absent_optional_fields() {
+        let value = serde_json::to_value(GetCompositeScheduleResponse {
+            status: GetCompositeScheduleStatus::Rejected,
+            connector_id: None,
+            schedule_start: None,
+            charging_schedule: None,
+        })
+        .unwrap();
+
+        assert_eq!(value, serde_json::json!({ "status": "Rejected" }));
+    }
+}

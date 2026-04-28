@@ -14,6 +14,7 @@ pub struct ReserveNowRequest {
     /// The idTag for which the connector is reserved.
     pub id_tag: String,
     /// Optional parent idTag.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id_tag: Option<String>,
     /// Unique reservation ID.
     pub reservation_id: i32,

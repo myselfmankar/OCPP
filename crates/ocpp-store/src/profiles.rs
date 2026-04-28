@@ -1,5 +1,5 @@
-use ocpp_protocol::messages::ChargingProfile;
 use crate::StoreError;
+use ocpp_protocol::messages::ChargingProfile;
 use sled::Tree;
 
 #[derive(Clone)]
@@ -19,7 +19,10 @@ impl ProfileStore {
         Ok(())
     }
 
-    pub fn list(&self, connector_id: Option<i32>) -> Result<Vec<(i32, ChargingProfile)>, StoreError> {
+    pub fn list(
+        &self,
+        connector_id: Option<i32>,
+    ) -> Result<Vec<(i32, ChargingProfile)>, StoreError> {
         let mut result = Vec::new();
         let prefix = if let Some(cid) = connector_id {
             format!("{}:", cid)

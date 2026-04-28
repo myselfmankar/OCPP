@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use crate::StoreError;
-use sled::Tree;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sled::Tree;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reservation {

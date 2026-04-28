@@ -59,7 +59,11 @@ pub async fn connect(
 
     tokio::spawn(run_io(ws, inbound_tx, outbound_rx, closed_tx));
 
-    Ok(WsChannels { inbound_rx, outbound_tx, closed_rx })
+    Ok(WsChannels {
+        inbound_rx,
+        outbound_tx,
+        closed_rx,
+    })
 }
 
 async fn run_io(

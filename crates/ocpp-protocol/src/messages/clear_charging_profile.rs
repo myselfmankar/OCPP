@@ -8,12 +8,16 @@ use crate::enums::{ChargingProfilePurpose, ClearChargingProfileStatus};
 #[serde(rename_all = "camelCase")]
 pub struct ClearChargingProfileRequest {
     /// Profile ID to clear (none = all profiles).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i32>,
     /// Connector to clear (0 = CP level, absent = any).
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub connector_id: Option<i32>,
     /// Purpose filter.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub charging_profile_purpose: Option<ChargingProfilePurpose>,
     /// Stack-level filter.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub stack_level: Option<i32>,
 }
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_json::Value;
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::error::{CallErrorCode, ProtocolError};
 
@@ -67,35 +67,51 @@ impl Frame {
         if arr.is_empty() {
             return Err(ProtocolError::EmptyFrame);
         }
-        let mtid = arr[0]
-            .as_u64()
-            .ok_or(ProtocolError::BadMessageTypeId)? as u8;
+        let mtid = arr[0].as_u64().ok_or(ProtocolError::BadMessageTypeId)? as u8;
 
         match mtid {
             2 => {
                 if arr.len() != 4 {
                     return Err(ProtocolError::BadFrameShape("Call must have 4 elements"));
                 }
-                let unique_id = arr[1].as_str().ok_or(ProtocolError::BadUniqueId)?.to_string();
+                let unique_id = arr[1]
+                    .as_str()
+                    .ok_or(ProtocolError::BadUniqueId)?
+                    .to_string();
                 let action = arr[2].as_str().ok_or(ProtocolError::BadAction)?.to_string();
                 let payload = arr[3].clone();
-                Ok(Frame::Call(Call { unique_id, action, payload }))
+                Ok(Frame::Call(Call {
+                    unique_id,
+                    action,
+                    payload,
+                }))
             }
             3 => {
                 if arr.len() != 3 {
-                    return Err(ProtocolError::BadFrameShape("CallResult must have 3 elements"));
+                    return Err(ProtocolError::BadFrameShape(
+                        "CallResult must have 3 elements",
+                    ));
                 }
-                let unique_id = arr[1].as_str().ok_or(ProtocolError::BadUniqueId)?.to_string();
+                let unique_id = arr[1]
+                    .as_str()
+                    .ok_or(ProtocolError::BadUniqueId)?
+                    .to_string();
                 let payload = arr[2].clone();
                 Ok(Frame::Result(CallResult { unique_id, payload }))
             }
             4 => {
                 if arr.len() != 5 {
-                    return Err(ProtocolError::BadFrameShape("CallError must have 5 elements"));
+                    return Err(ProtocolError::BadFrameShape(
+                        "CallError must have 5 elements",
+                    ));
                 }
-                let unique_id = arr[1].as_str().ok_or(ProtocolError::BadUniqueId)?.to_string();
+                let unique_id = arr[1]
+                    .as_str()
+                    .ok_or(ProtocolError::BadUniqueId)?
+                    .to_string();
                 let code_str = arr[2].as_str().ok_or(ProtocolError::BadAction)?;
-                let error_code = code_str.parse::<CallErrorCode>()
+                let error_code = code_str
+                    .parse::<CallErrorCode>()
                     .unwrap_or(CallErrorCode::GenericError);
                 let error_description = arr[3].as_str().unwrap_or("").to_string();
                 let error_details = arr[4].clone();
